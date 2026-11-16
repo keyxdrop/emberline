@@ -6,6 +6,12 @@ thirty seconds of fuse. First side to five rounds takes the yard.
 
 **Buy smart. Plant the Spark. Hold the line.**
 
+[![make.fun bounty](https://make.fun/badge/best-game-01.svg)](https://make.fun/bounty/best-game-01)
+[![rank](https://make.fun/badge/best-game-01/keyxdrop/emberline/rank.svg)](https://make.fun/bounty/best-game-01)
+[![reward](https://make.fun/badge/best-game-01/keyxdrop/emberline/reward.svg)](https://make.fun/bounty/best-game-01)
+
+Entered in the [best-game-01 bounty on make.fun](https://make.fun/bounty/best-game-01).
+
 ## The game
 
 - **Rounds with a real economy.** Fifteen-second buy phases, eight shop rows
