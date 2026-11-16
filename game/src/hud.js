@@ -1,249 +1,224 @@
-// The DOM HUD: crosshair, hit marker, health, ammo, money, timer, score, rosters,
-// killfeed, buy menu, banners and the one overlay panel. It never touches the
-// simulation; main.js pushes numbers in and reads the callbacks out. The buy
-// rows carry each item's one-line blurb (weapons.js) under its name, so a
-// first-time buyer can tell a Rook from a Longbow without a wiki.
-import { WEAPONS, GRENADE, FLASH, ARMOR } from './weapons.js';
+// hud.js — everything drawn over the 3D world: scoreboard, clock, wallet,
+// health, killfeed, radio, banners, the buy menu, the objective marker and the
+// damage arc. Pure DOM work; the game tells it what happened and it paints.
+// Element ids are a contract with game/index.html.
 
-const COPY = {
-  start: {
-    title: 'EMBERLINE',
-    copy: 'A 5v5 tactical FPS that runs entirely in your browser — no download, no sign-up. Ember plants the Spark; Ashen stops them. First to 5 rounds takes the yard.',
-    action: 'Click to play',
-  },
-  paused: {
-    title: 'EMBERLINE',
-    copy: 'Paused. Click to resume.',
-    action: 'Click to resume',
-  },
-};
+import { WEAPONS, GEAR, BUY_ROWS } from './config.js';
 
-export function createHud(callbacks) {
-  const $ = (id) => document.getElementById(id);
-  const overlay = $('overlay');
-  const title = $('overlay-title');
-  const copy = $('overlay-copy');
-  const play = $('play');
-  const ammoEl = $('ammo');
-  const ammoMag = $('ammo-mag');
-  const ammoReserve = $('ammo-reserve');
-  const weaponName = $('weapon-name');
-  const healthFill = $('health-fill');
-  const healthValue = $('health-value');
-  const armorFill = $('armor-fill');
-  const moneyValue = $('money-value');
-  const timerValue = $('timer-value');
-  const timerLabel = $('timer-label');
-  const scoreEmber = $('score-ember');
-  const scoreAshen = $('score-ashen');
-  const roundValue = $('round-value');
-  const objective = $('objective');
-  const area = $('area-name');
-  const rosterEmber = $('roster-ember-list');
-  const rosterAshen = $('roster-ashen-list');
-  const killfeed = $('killfeed');
-  const callouts = $('callouts');
-  const flashEl = $('flash');
-  const hitmarker = $('hitmarker');
-  const crosshair = $('crosshair');
-  const banner = $('banner');
-  const bannerTitle = $('banner-title');
-  const bannerSub = $('banner-sub');
-  const buyMenu = $('buy-menu');
-  const buyList = $('buy-list');
-  const buyMoney = $('buy-money');
-  const progress = $('progress');
-  const progressLabel = $('progress-label');
-  const progressFill = $('progress-fill');
-  const vignette = $('vignette');
-  const spectate = $('spectate');
+const $ = (id) => document.getElementById(id);
 
-  let hitTimer = 0;
-  let lastAmmo = '';
-  let lastHealth = '';
-  let lastTimer = '';
-  let lastScore = '';
-  let lastRoster = '';
-  let lastMoney = -1;
-  let bannerTimer = 0;
-
-  function row(name, hp, alive, isPlayer, isCarrier) {
-    const cls = alive ? '' : ' dead';
-    const shown = isPlayer ? 'YOU' : name;
-    const carry = isCarrier ? ' ◆' : '';
-    return `<div class="roster-row${cls}"><span>${shown}${carry}</span><span class="roster-hp">${alive ? hp : '✕'}</span></div>`;
+export class Hud {
+  constructor() {
+    this.el = {
+      hud: $('hud'), clock: $('roundClock'), live: $('livePill'),
+      scoreE: $('scoreEmber'), scoreA: $('scoreAshen'), roundLabel: $('roundLabel'),
+      money: $('money'), hpFill: $('hpFill'), hpText: $('hpText'),
+      armourTag: $('armourTag'), weapon: $('weaponText'), ammo: $('ammoText'),
+      gear: $('gearText'), killfeed: $('killfeed'), radio: $('radio'),
+      banner: $('banner'), bannerTitle: $('bannerTitle'), bannerSub: $('bannerSub'),
+      chips: $('chips'), marker: $('marker'), markerLabel: $('markerLabel'),
+      markerDist: $('markerDist'), dmg: $('dmgArc'), hit: $('hitmarker'),
+      buy: $('buyMenu'), buyGrid: $('buyGrid'), buyMoney: $('buyMoney'),
+      buyClock: $('buyClock'), plant: $('plantBar'), plantFill: $('plantFill'),
+      plantLabel: $('plantLabel'), flash: $('flashOverlay'), lowHp: $('lowHp'),
+      start: $('startScreen'), end: $('endScreen'), endTitle: $('endTitle'),
+      endStats: $('endStats'), charge: $('chargeTag'),
+    };
+    this.bannerTimer = 0;
+    this.dmgTimer = 0;
+    this.hitTimer = 0;
+    this.radioTimer = 0;
+    this.buildBuyRows();
   }
 
-  const buyItems = [
-    ...WEAPONS.map((w, i) => ({ key: String(i + 1), name: w.name, blurb: w.blurb, price: w.price, index: i, kind: 'weapon' })),
-    { key: '6', name: GRENADE.name, blurb: GRENADE.blurb, price: GRENADE.price, index: 5, kind: 'grenade' },
-    { key: '7', name: ARMOR.name, blurb: ARMOR.blurb, price: ARMOR.price, index: 6, kind: 'armor' },
-    { key: '8', name: FLASH.name, blurb: FLASH.blurb, price: FLASH.price, index: 7, kind: 'flash' },
-  ];
+  buildBuyRows() {
+    this.buyRowEls = new Map();
+    BUY_ROWS.forEach((row, i) => {
+      const def = WEAPONS[row.id] ?? GEAR[row.id];
+      const div = document.createElement('button');
+      div.className = 'buy-row';
+      div.innerHTML =
+        `<span class="buy-key">${i + 1}</span>` +
+        `<span class="buy-main"><span class="buy-name">${def.name}</span>` +
+        `<span class="buy-kind">${def.kind}</span>` +
+        `<span class="buy-blurb">${def.blurb}</span></span>` +
+        `<span class="buy-price">$${def.price}</span>` +
+        `<span class="buy-state"></span>`;
+      div.addEventListener('click', () => this.onBuy && this.onBuy(row.id));
+      this.el.buyGrid.appendChild(div);
+      this.buyRowEls.set(row.id, div);
+    });
+  }
 
-  return {
-    setHealth(hp, armor) {
-      const key = `${hp}|${armor}`;
-      if (key === lastHealth) return;
-      lastHealth = key;
-      healthFill.style.width = `${Math.max(0, hp)}%`;
-      healthValue.textContent = String(Math.max(0, Math.ceil(hp)));
-      armorFill.style.width = `${Math.max(0, Math.min(100, armor))}%`;
-      healthFill.classList.toggle('low', hp <= 30);
-    },
-    setAmmo(mag, reserve, name) {
-      const key = `${mag}|${reserve}|${name}`;
-      if (key === lastAmmo) return;
-      lastAmmo = key;
-      ammoMag.textContent = String(mag);
-      ammoReserve.textContent = `/ ${reserve}`;
-      weaponName.textContent = name;
-      ammoEl.classList.toggle('empty', mag === 0);
-    },
-    setMoney(value) {
-      if (value === lastMoney) return;
-      lastMoney = value;
-      moneyValue.textContent = `$${value}`;
-      buyMoney.textContent = `$${value}`;
-    },
-    setTimer(seconds, phase) {
-      const s = Math.max(0, Math.ceil(seconds));
-      const text = `${String(Math.floor(s / 60)).padStart(1, '0')}:${String(s % 60).padStart(2, '0')}`;
-      const key = `${text}|${phase}`;
-      if (key === lastTimer) return;
-      lastTimer = key;
-      timerValue.textContent = text;
-      timerLabel.textContent = phase === 'buy' ? 'BUY' : phase === 'planted' ? 'SPARK LIVE' : phase === 'over' ? 'ROUND OVER' : 'LIVE';
-      timerValue.classList.toggle('urgent', s <= 10 && phase !== 'buy' && phase !== 'over');
-    },
-    setScore(ember, ashen, round) {
-      const key = `${ember}|${ashen}|${round}`;
-      if (key === lastScore) return;
-      lastScore = key;
-      scoreEmber.textContent = String(ember);
-      scoreAshen.textContent = String(ashen);
-      roundValue.textContent = `ROUND ${round}`;
-    },
-    setObjective(text) {
-      if (objective.textContent !== text) objective.textContent = text;
-    },
-    setArea(name) {
-      if (area.textContent !== name) area.textContent = name;
-    },
-    setRoster(ember, ashen) {
-      const sig = JSON.stringify([ember, ashen]);
-      if (sig === lastRoster) return;
-      lastRoster = sig;
-      rosterEmber.innerHTML = ember.map((p) => row(p.name, p.hp, p.alive, p.isPlayer, p.isCarrier)).join('');
-      rosterAshen.innerHTML = ashen.map((p) => row(p.name, p.hp, p.alive, p.isPlayer, p.isCarrier)).join('');
-    },
-    killfeed(killer, killerTeam, victim, victimTeam, headshot) {
-      const entry = document.createElement('div');
-      entry.className = 'killfeed-entry';
-      entry.innerHTML = `<span class="${killerTeam}">${killer}</span> ${headshot ? '◉' : '✕'} <span class="${victimTeam}">${victim}</span>`;
-      killfeed.prepend(entry);
-      while (killfeed.children.length > 5) killfeed.removeChild(killfeed.lastChild);
-      setTimeout(() => entry.remove(), 5200);
-    },
-    // Team radio: a named line in the speaker's team colour, gone in seconds.
-    callout(name, team, text) {
-      if (!callouts) return;
-      const entry = document.createElement('div');
-      entry.className = 'callout-entry';
-      entry.innerHTML = `<span class="${team}">${name}</span> — ${text}`;
-      callouts.appendChild(entry);
-      while (callouts.children.length > 3) callouts.removeChild(callouts.firstChild);
-      setTimeout(() => entry.remove(), 4600);
-    },
-    // A flash charge went off in the player's face: white out, then fade.
-    whiteFlash(strength = 1) {
-      if (!flashEl) return;
-      flashEl.style.transition = 'none';
-      flashEl.style.opacity = String(Math.min(1, strength));
-      requestAnimationFrame(() => {
-        flashEl.style.transition = 'opacity 900ms ease-out';
-        flashEl.style.opacity = '0';
-      });
-    },
-    hitMarker(killed, holdMs = 90) {
-      hitmarker.classList.add('on');
-      hitmarker.classList.toggle('kill', killed);
-      clearTimeout(hitTimer);
-      hitTimer = setTimeout(() => hitmarker.classList.remove('on', 'kill'), holdMs);
-    },
-    setCrosshairSpread(px) {
-      crosshair.style.setProperty('--gap', `${px.toFixed(1)}px`);
-    },
-    damageFlash() {
-      vignette.classList.add('on');
-      setTimeout(() => vignette.classList.remove('on'), 140);
-    },
-    banner(titleText, sub, tone, holdMs = 2600) {
-      bannerTitle.textContent = titleText;
-      bannerSub.textContent = sub || '';
-      banner.className = `banner show ${tone || ''}`;
-      clearTimeout(bannerTimer);
-      bannerTimer = setTimeout(() => banner.classList.remove('show'), holdMs);
-    },
-    showBuy(money, owned) {
-      buyMoney.textContent = `$${money}`;
-      buyList.innerHTML = buyItems.map((item) => {
-        const has = item.kind === 'weapon' ? owned(item.index) : false;
-        const afford = money >= item.price;
-        return `<button type="button" class="buy-row${has ? ' owned' : ''}${afford ? '' : ' poor'}" data-index="${item.index}" data-kind="${item.kind}">
-          <span class="buy-key">${item.key}</span><span class="buy-name">${item.name}<span class="buy-blurb">${item.blurb || ''}</span></span>
-          <span class="buy-state">${has ? 'OWNED' : `$${item.price}`}</span></button>`;
-      }).join('');
-      buyList.querySelectorAll('.buy-row').forEach((el) => {
-        el.addEventListener('click', () => callbacks.onBuy(Number(el.dataset.index), el.dataset.kind));
-      });
-      buyMenu.hidden = false;
-    },
-    hideBuy() {
-      buyMenu.hidden = true;
-    },
-    buyOpen() {
-      return !buyMenu.hidden;
-    },
-    showProgress(label, frac) {
-      progress.hidden = false;
-      progressLabel.textContent = label;
-      progressFill.style.width = `${Math.max(0, Math.min(1, frac)) * 100}%`;
-    },
-    hideProgress() {
-      progress.hidden = true;
-    },
-    setSpectate(name) {
-      spectate.hidden = !name;
-      if (name) spectate.textContent = `Spectating ${name} — next round to play`;
-    },
-    showOverlay(mode, data) {
-      // The three-step brief belongs to the start screen only; the round and
-      // match panels keep their own story.
-      const steps = document.getElementById('brief-steps');
-      if (steps) steps.style.display = mode === 'start' ? '' : 'none';
-      if (mode === 'match') {
-        title.textContent = data.winner === 'ember' ? 'EMBERLINE WINS' : data.winner === 'ashen' ? 'ASHEN WINS' : 'DRAW';
-        copy.textContent = `Final ${data.ember} — ${data.ashen}. ${data.winner === 'ember' ? 'The yard is yours.' : 'The yard holds its breath.'}`;
-        play.textContent = 'Play again';
-      } else if (mode === 'round') {
-        title.textContent = data.winner === 'ember' ? 'Round to Ember' : 'Round to Ashen';
-        copy.textContent = `${data.reason}. ${data.ember} — ${data.ashen}.`;
-        play.textContent = 'Next round';
-      } else {
-        const text = COPY[mode];
-        title.textContent = text.title;
-        copy.textContent = text.copy;
-        play.textContent = text.action;
-      }
-      overlay.hidden = false;
-      play.focus();
-    },
-    hideOverlay() {
-      overlay.hidden = true;
-    },
-    onPlay(handler) {
-      play.addEventListener('click', handler);
-    },
-  };
+  // Refresh every row's affordability and ownership for the current wallet.
+  refreshBuy(money, owned) {
+    for (const [id, div] of this.buyRowEls) {
+      const def = WEAPONS[id] ?? GEAR[id];
+      const has = owned.has(id);
+      div.classList.toggle('owned', has);
+      div.classList.toggle('poor', !has && money < def.price);
+      div.querySelector('.buy-state').textContent = has ? 'OWNED' : money < def.price ? '—' : 'BUY';
+    }
+    this.el.buyMoney.textContent = `$${money}`;
+  }
+
+  showBuy(seconds) {
+    this.el.buy.classList.add('open');
+    this.el.buyClock.textContent = `Round starts in ${Math.ceil(seconds)}s — press B to close early`;
+  }
+
+  hideBuy() {
+    this.el.buy.classList.remove('open');
+  }
+
+  setScore(ember, ashen, round) {
+    this.el.scoreE.textContent = ember;
+    this.el.scoreA.textContent = ashen;
+    this.el.roundLabel.textContent = `ROUND ${round}`;
+  }
+
+  setClock(seconds, planted) {
+    const s = Math.max(0, Math.ceil(seconds));
+    this.el.clock.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+    this.el.clock.classList.toggle('danger', planted || s <= 15);
+    this.el.live.innerHTML = planted ? '● CHARGE LIVE' : '● LIVE';
+    this.el.live.classList.toggle('planted', !!planted);
+  }
+
+  setWallet(money) {
+    this.el.money.textContent = `$${money}`;
+  }
+
+  setPlayer(hp, armour, weaponName, ammo, reserve, grenades, flashes, hasCharge) {
+    this.el.hpFill.style.width = `${Math.max(0, hp)}%`;
+    this.el.hpFill.classList.toggle('low', hp <= 35);
+    this.el.hpText.textContent = `${Math.ceil(hp)}`;
+    this.el.armourTag.textContent = armour ? '🛡 VEST' : '';
+    this.el.weapon.textContent = weaponName;
+    this.el.ammo.innerHTML = `${ammo}<span class="ammo-res"> / ${reserve}</span>`;
+    const bits = [];
+    if (grenades > 0) bits.push(`G — Pop Charge ×${grenades}`);
+    if (flashes > 0) bits.push(`F — Flash ×${flashes}`);
+    this.el.gear.textContent = bits.join('   ');
+    this.el.charge.textContent = hasCharge ? '◆ YOU HOLD THE SPARK CHARGE — plant it at the Forge' : '';
+    this.el.lowHp.classList.toggle('on', hp <= 35 && hp > 0);
+  }
+
+  killfeed(killer, victim, weaponName, killerTeam, victimTeam) {
+    const row = document.createElement('div');
+    row.className = 'feed-row';
+    row.innerHTML =
+      `<span class="feed-k ${killerTeam}">${killer}</span>` +
+      `<span class="feed-w">${weaponName}</span>` +
+      `<span class="feed-v ${victimTeam}">▸ ${victim}</span>`;
+    this.el.killfeed.appendChild(row);
+    while (this.el.killfeed.children.length > 5) this.el.killfeed.firstChild.remove();
+    setTimeout(() => row.classList.add('fade'), 4200);
+    setTimeout(() => row.remove(), 5000);
+  }
+
+  radio(name, line, team) {
+    this.el.radio.innerHTML = `<span class="radio-name ${team}">⌁ ${name}:</span> ${line}`;
+    this.el.radio.classList.add('show');
+    this.radioTimer = 4.2;
+  }
+
+  banner(title, sub, seconds = 3.2) {
+    this.el.bannerTitle.textContent = title;
+    this.el.bannerSub.textContent = sub ?? '';
+    this.el.banner.classList.add('show');
+    this.bannerTimer = seconds;
+  }
+
+  // The end-shot callout: a smaller, hotter line under the round banner that
+  // names the kill the round will be remembered by.
+  callout(text) {
+    const el = $('callout');
+    el.textContent = text;
+    el.classList.add('show');
+    setTimeout(() => el.classList.remove('show'), 3400);
+  }
+
+  chips(list) {
+    this.el.chips.innerHTML = '';
+    for (const text of list) {
+      const chip = document.createElement('div');
+      chip.className = 'chip';
+      chip.textContent = text;
+      this.el.chips.appendChild(chip);
+    }
+  }
+
+  clearChips() {
+    this.el.chips.innerHTML = '';
+  }
+
+  // Objective marker: screen-space pin with a live distance readout.
+  marker(show, x, y, label, dist) {
+    if (!show) {
+      this.el.marker.classList.remove('show');
+      return;
+    }
+    this.el.marker.classList.add('show');
+    this.el.marker.style.transform = `translate(${x}px, ${y}px) translate(-50%, -100%)`;
+    this.el.markerLabel.textContent = label;
+    this.el.markerDist.textContent = `${Math.max(1, Math.round(dist))}m`;
+  }
+
+  // The red arc that points at whoever just shot the player. Bearing is in
+  // radians, 0 = ahead, positive = to the right.
+  damageFrom(bearing) {
+    this.el.dmg.style.transform = `translate(-50%, -50%) rotate(${bearing}rad)`;
+    this.el.dmg.classList.add('show');
+    this.dmgTimer = 0.7;
+  }
+
+  hitmarker(kill) {
+    this.el.hit.classList.toggle('kill', !!kill);
+    this.el.hit.classList.add('show');
+    this.hitTimer = kill ? 0.22 : 0.1;
+  }
+
+  plantProgress(frac, label) {
+    if (frac === null) {
+      this.el.plant.classList.remove('show');
+      return;
+    }
+    this.el.plant.classList.add('show');
+    this.el.plantFill.style.width = `${Math.round(frac * 100)}%`;
+    this.el.plantLabel.textContent = label;
+  }
+
+  flash(opacity) {
+    this.el.flash.style.opacity = String(opacity);
+  }
+
+  showStart() { this.el.start.classList.add('open'); }
+  hideStart() { this.el.start.classList.remove('open'); }
+
+  showEnd(title, statsHtml) {
+    this.el.endTitle.textContent = title;
+    this.el.endStats.innerHTML = statsHtml;
+    this.el.end.classList.add('open');
+  }
+  hideEnd() { this.el.end.classList.remove('open'); }
+
+  update(dt) {
+    if (this.bannerTimer > 0) {
+      this.bannerTimer -= dt;
+      if (this.bannerTimer <= 0) this.el.banner.classList.remove('show');
+    }
+    if (this.dmgTimer > 0) {
+      this.dmgTimer -= dt;
+      if (this.dmgTimer <= 0) this.el.dmg.classList.remove('show');
+    }
+    if (this.hitTimer > 0) {
+      this.hitTimer -= dt;
+      if (this.hitTimer <= 0) this.el.hit.classList.remove('show');
+    }
+    if (this.radioTimer > 0) {
+      this.radioTimer -= dt;
+      if (this.radioTimer <= 0) this.el.radio.classList.remove('show');
+    }
+  }
 }

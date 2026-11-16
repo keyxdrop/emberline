@@ -1,88 +1,116 @@
-// The first-minute coach: three small pieces of guidance that teach the game
-// while it is being played, and nothing else. An objective marker floats over
-// the place the round wants the player to be (a Relay to plant at, the
-// team-mate carrying the Spark, the planted charge to defend), with its
-// distance; a hint chip above the objective line names the one job of the
-// moment in the early rounds; and a red arc at the crosshair shows which
-// direction a hit just came from. Pure DOM and projection math: main.js says
-// where the objective is and where a hit came from, and calls update() once a
-// frame with the camera. The coach never touches the simulation.
+// coach.js — the quiet instructor riding on the player's shoulder. It owns
+// three teaching tools: the objective marker (what to do, where, how far), the
+// hint chips that sequence the first two rounds and then get out of the way,
+// and the damage-direction arc that turns "shot from nowhere" into "shot from
+// there". It reads a state snapshot from the game and never touches the rules.
+
 import * as THREE from 'three';
 
-const scratch = new THREE.Vector3();
+const wrapPi = (a) => {
+  while (a > Math.PI) a -= Math.PI * 2;
+  while (a < -Math.PI) a += Math.PI * 2;
+  return a;
+};
 
-export function createCoach() {
-  const marker = document.getElementById('waypoint');
-  const markerLabel = document.getElementById('waypoint-label');
-  const markerDist = document.getElementById('waypoint-dist');
-  const arc = document.getElementById('dmgdir');
-  const chip = document.getElementById('hint');
-
-  let target = null; // { x, y, z } in world space, or null for no marker
-  let targetLabel = '';
-  let arcTimer = 0;
-  let lastHint = '';
-
-  function hideMarker() {
-    if (marker && !marker.hidden) marker.hidden = true;
+export class Coach {
+  constructor(hud, camera) {
+    this.hud = hud;
+    this.camera = camera;
+    this.v = new THREE.Vector3();
+    this.taughtHurt = false;
   }
 
-  return {
-    // Point the marker at a world position, or clear it with null.
-    setTarget(point, label) {
-      if (!point) {
-        target = null;
-        hideMarker();
-        return;
-      }
-      target = point;
-      targetLabel = label || '';
-      if (markerLabel && markerLabel.textContent !== targetLabel) markerLabel.textContent = targetLabel;
-    },
+  resetMatch() {
+    this.taughtHurt = false;
+    this.hud.clearChips();
+  }
 
-    // A hit landed on the player from world position `from`: flash the arc at
-    // the bearing relative to where the player is facing (0 = ahead).
-    damageFrom(from, playerPos, yaw) {
-      if (!arc || !from) return;
-      const dx = from.x - playerPos.x;
-      const dz = from.z - playerPos.z;
-      // Player forward is (-sin yaw, -cos yaw); right is (cos yaw, -sin yaw).
-      const fwdX = -Math.sin(yaw);
-      const fwdZ = -Math.cos(yaw);
-      const rightX = Math.cos(yaw);
-      const rightZ = -Math.sin(yaw);
-      const rel = Math.atan2(dx * rightX + dz * rightZ, dx * fwdX + dz * fwdZ);
-      arc.style.transform = `translate(-50%, -50%) rotate(${rel}rad)`;
-      arc.classList.add('on');
-      clearTimeout(arcTimer);
-      arcTimer = setTimeout(() => arc.classList.remove('on'), 650);
-    },
+  onBuyPhase(round) {
+    if (round === 1) {
+      this.hud.chips([
+        'BUY — click a row or press 1–8. The Forgeline is the pro pick.',
+        'You hold the Spark Charge ◆ — your squad will guard you.',
+      ]);
+    } else if (round === 2) {
+      this.hud.chips([
+        'Slagweave Vest turns away a third of every bullet.',
+        'Won the round? Winners bank $2,700. Spend it before it rusts.',
+      ]);
+    } else {
+      this.hud.clearChips();
+    }
+  }
 
-    // The one job of the moment, in words. Pass '' to clear the chip.
-    hint(text) {
-      if (!chip || text === lastHint) return;
-      lastHint = text;
-      chip.textContent = text || '';
-      chip.hidden = !text;
-    },
+  onLiveStart(round) {
+    if (round === 1) {
+      this.hud.chips([
+        'Follow the ◆ marker north to the Forge.',
+        'Inside the glowing ring, hold E to plant the charge.',
+      ]);
+    } else if (round === 2) {
+      this.hud.chips([
+        'Shift walks, Ctrl crouches, R reloads, G throws a Pop Charge.',
+        'The red arc after a hit points straight at your shooter.',
+      ]);
+    } else {
+      this.hud.clearChips();
+    }
+  }
 
-    // Project the marker once per frame. Behind the camera or too close to
-    // matter (the player is standing on it) hides it.
-    update(camera, playerPos) {
-      if (!marker || !target) return;
-      scratch.set(target.x, target.y, target.z);
-      const dist = playerPos ? Math.hypot(target.x - playerPos.x, target.z - playerPos.z) : 0;
-      scratch.project(camera);
-      if (scratch.z > 1 || scratch.z < -1 || dist < 2.2) {
-        hideMarker();
-        return;
-      }
-      const x = (scratch.x * 0.5 + 0.5) * window.innerWidth;
-      const y = (-scratch.y * 0.5 + 0.5) * window.innerHeight;
-      marker.style.left = `${x.toFixed(0)}px`;
-      marker.style.top = `${y.toFixed(0)}px`;
-      if (markerDist) markerDist.textContent = `${Math.round(dist)}m`;
-      marker.hidden = false;
-    },
-  };
+  onPlanted(byUs) {
+    if (byUs) this.hud.chips(['Charge live — 30 seconds. Guard it, do not chase.']);
+  }
+
+  onDefuseThreat() {
+    this.hud.chips(['They are defusing — get to the Forge, now!']);
+  }
+
+  onPlayerHurt(shooterPos, playerPos, playerYaw) {
+    if (!this.taughtHurt) {
+      this.taughtHurt = true;
+      this.hud.chips(['That red arc points at your shooter. Use it.']);
+    }
+    // Bearing of the shooter in the player's own frame: 0 ahead, + right.
+    const worldYaw = Math.atan2(-(shooterPos.x - playerPos.x), -(shooterPos.z - playerPos.z));
+    this.hud.damageFrom(wrapPi(worldYaw - playerYaw));
+  }
+
+  // The marker, refreshed every frame from the game's snapshot.
+  update(snap) {
+    if (!snap.playerAlive || (snap.phase !== 'live' && snap.phase !== 'planted')) {
+      this.hud.marker(false);
+      return;
+    }
+    let target = null;
+    let label = '';
+    if (snap.planted) {
+      target = snap.chargePos;
+      label = 'GUARD THE CHARGE';
+    } else if (snap.playerHasCharge) {
+      target = snap.sitePos;
+      label = 'PLANT AT THE FORGE';
+    } else if (snap.carrierPos) {
+      target = snap.carrierPos;
+      label = `PROTECT ${snap.carrierName}`;
+    } else if (snap.chargePos) {
+      target = snap.chargePos;
+      label = 'RECOVER THE CHARGE';
+    }
+    if (!target) {
+      this.hud.marker(false);
+      return;
+    }
+    this.v.set(target.x, (target.y ?? 1.6), target.z).project(this.camera);
+    const dist = this.camera.position.distanceTo(new THREE.Vector3(target.x, 1.2, target.z));
+    if (this.v.z > 1) {
+      // Behind the camera: pin to the bottom edge so the player turns around.
+      this.hud.marker(true, window.innerWidth / 2, window.innerHeight - 90, label, dist);
+      return;
+    }
+    const x = (this.v.x * 0.5 + 0.5) * window.innerWidth;
+    const y = (-this.v.y * 0.5 + 0.5) * window.innerHeight;
+    const clampedX = Math.max(50, Math.min(window.innerWidth - 50, x));
+    const clampedY = Math.max(70, Math.min(window.innerHeight - 60, y));
+    this.hud.marker(true, clampedX, clampedY, label, dist);
+  }
 }

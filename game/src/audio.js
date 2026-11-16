@@ -1,141 +1,87 @@
-// Procedural sound, WebAudio only — no audio files, no network. Every effect is
-// a short synth: filtered noise for gunfire and explosions, short sine blips for
-// UI, plant beeps and round stingers. The context starts on the first user
-// gesture; calls before that are dropped silently.
-export function createAudio() {
-  let ctx = null;
-  let master = null;
-  let noiseBuffer = null;
+// audio.js — a pocket synthesiser. Every sound in EMBERLINE is oscillators and
+// filtered noise made on the spot: no audio files, nothing to fetch, and the
+// whole band fits in this one file. The context wakes on the first click or
+// keypress, as browsers require, and stays silent until then.
 
-  function ensure() {
-    if (ctx) {
-      if (ctx.state === 'suspended') ctx.resume().catch(() => {});
-      return ctx;
-    }
-    try {
-      const AC = window.AudioContext || window.webkitAudioContext;
-      if (!AC) return null;
-      ctx = new AC();
-      master = ctx.createGain();
-      master.gain.value = 0.35;
-      master.connect(ctx.destination);
-      noiseBuffer = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
-      const data = noiseBuffer.getChannelData(0);
-      for (let i = 0; i < data.length; i += 1) data[i] = Math.random() * 2 - 1;
-    } catch {
-      ctx = null;
-    }
-    return ctx;
+export class SoundFX {
+  constructor() {
+    this.ctx = null;
+    this.master = null;
+    this.noiseBuf = null;
   }
 
-  function noise(duration, filterType, frequency, gainValue, when = 0) {
-    const c = ensure();
-    if (!c) return;
-    const t = c.currentTime + when;
-    const source = c.createBufferSource();
-    source.buffer = noiseBuffer;
-    const filter = c.createBiquadFilter();
-    filter.type = filterType;
-    filter.frequency.value = frequency;
-    const gain = c.createGain();
-    gain.gain.setValueAtTime(gainValue, t);
-    gain.gain.exponentialRampToValueAtTime(0.001, t + duration);
-    source.connect(filter).connect(gain).connect(master);
-    source.start(t);
-    source.stop(t + duration + 0.02);
+  wake() {
+    if (this.ctx) {
+      if (this.ctx.state === 'suspended') this.ctx.resume();
+      return;
+    }
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    this.ctx = new AC();
+    this.master = this.ctx.createGain();
+    this.master.gain.value = 0.32;
+    this.master.connect(this.ctx.destination);
+    const len = this.ctx.sampleRate * 0.6;
+    this.noiseBuf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
+    const data = this.noiseBuf.getChannelData(0);
+    for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
   }
 
-  function tone(frequency, duration, gainValue, type = 'sine', when = 0, slideTo = 0) {
-    const c = ensure();
-    if (!c) return;
-    const t = c.currentTime + when;
-    const osc = c.createOscillator();
+  tone(freq, dur, type = 'square', vol = 0.2, slideTo = null, delay = 0) {
+    if (!this.ctx) return;
+    const t0 = this.ctx.currentTime + delay;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
     osc.type = type;
-    osc.frequency.setValueAtTime(frequency, t);
-    if (slideTo) osc.frequency.exponentialRampToValueAtTime(slideTo, t + duration);
-    const gain = c.createGain();
-    gain.gain.setValueAtTime(gainValue, t);
-    gain.gain.exponentialRampToValueAtTime(0.001, t + duration);
-    osc.connect(gain).connect(master);
-    osc.start(t);
-    osc.stop(t + duration + 0.02);
+    osc.frequency.setValueAtTime(freq, t0);
+    if (slideTo) osc.frequency.exponentialRampToValueAtTime(Math.max(20, slideTo), t0 + dur);
+    gain.gain.setValueAtTime(vol, t0);
+    gain.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+    osc.connect(gain); gain.connect(this.master);
+    osc.start(t0); osc.stop(t0 + dur + 0.02);
   }
 
-  const SHOTS = {
-    pistol: { noise: 0.09, freq: 2400, gain: 0.5, tone: 190, slide: 70 },
-    smg: { noise: 0.07, freq: 3000, gain: 0.42, tone: 220, slide: 80 },
-    rifle: { noise: 0.12, freq: 1800, gain: 0.55, tone: 150, slide: 55 },
-    shotgun: { noise: 0.2, freq: 1200, gain: 0.7, tone: 110, slide: 45 },
-    sniper: { noise: 0.22, freq: 1500, gain: 0.7, tone: 130, slide: 40 },
-    distant: { noise: 0.1, freq: 900, gain: 0.16, tone: 120, slide: 60 },
-  };
+  noise(dur, vol = 0.3, freq = 1800, q = 0.8, delay = 0) {
+    if (!this.ctx) return;
+    const t0 = this.ctx.currentTime + delay;
+    const src = this.ctx.createBufferSource();
+    src.buffer = this.noiseBuf;
+    src.loop = true;
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = 'bandpass'; filter.frequency.value = freq; filter.Q.value = q;
+    const gain = this.ctx.createGain();
+    gain.gain.setValueAtTime(vol, t0);
+    gain.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+    src.connect(filter); filter.connect(gain); gain.connect(this.master);
+    src.start(t0); src.stop(t0 + dur + 0.02);
+  }
 
-  return {
-    unlock() {
-      ensure();
-    },
-    shot(kind = 'rifle', distant = false) {
-      const s = SHOTS[distant ? 'distant' : kind] || SHOTS.rifle;
-      noise(s.noise, 'lowpass', s.freq, s.gain);
-      tone(s.tone, s.noise + 0.05, s.gain * 0.6, 'triangle', 0, s.slide);
-    },
-    dry() {
-      tone(1400, 0.03, 0.12, 'square');
-    },
-    reload() {
-      tone(700, 0.04, 0.14, 'square', 0);
-      tone(500, 0.04, 0.14, 'square', 0.12);
-      tone(900, 0.05, 0.16, 'square', 0.55);
-    },
-    hit() {
-      tone(1900, 0.05, 0.2, 'sine');
-    },
-    kill() {
-      tone(880, 0.09, 0.22, 'sine', 0);
-      tone(1320, 0.12, 0.2, 'sine', 0.07);
-    },
-    hurt() {
-      noise(0.12, 'lowpass', 500, 0.3);
-      tone(90, 0.14, 0.3, 'sawtooth', 0, 55);
-    },
-    beep(final = false) {
-      tone(final ? 1560 : 1180, 0.09, 0.2, 'sine');
-    },
-    plant() {
-      tone(1180, 0.1, 0.2, 'sine', 0);
-      tone(1180, 0.1, 0.2, 'sine', 0.18);
-      tone(1560, 0.16, 0.22, 'sine', 0.36);
-    },
-    defuse() {
-      tone(1560, 0.1, 0.2, 'sine', 0);
-      tone(1560, 0.1, 0.2, 'sine', 0.18);
-      tone(2093, 0.2, 0.22, 'sine', 0.36);
-    },
-    explosion() {
-      noise(0.7, 'lowpass', 420, 0.9);
-      tone(70, 0.6, 0.6, 'sine', 0, 28);
-      noise(0.25, 'highpass', 2500, 0.25, 0.02);
-    },
-    flash() {
-      noise(0.08, 'highpass', 3000, 0.5);
-      tone(5200, 0.7, 0.06, 'sine', 0.02);
-    },
-    buy() {
-      tone(660, 0.06, 0.18, 'sine', 0);
-      tone(990, 0.08, 0.18, 'sine', 0.06);
-    },
-    denied() {
-      tone(220, 0.12, 0.2, 'square', 0, 160);
-    },
-    roundWin() {
-      tone(523, 0.14, 0.22, 'triangle', 0);
-      tone(659, 0.14, 0.22, 'triangle', 0.13);
-      tone(784, 0.28, 0.24, 'triangle', 0.26);
-    },
-    roundLose() {
-      tone(392, 0.16, 0.22, 'triangle', 0);
-      tone(330, 0.16, 0.22, 'triangle', 0.15);
-      tone(262, 0.32, 0.24, 'triangle', 0.3);
-    },
-  };
+  shot(kind) {
+    if (kind === 'Scattergun') { this.noise(0.16, 0.5, 700, 0.5); this.tone(120, 0.12, 'triangle', 0.3, 50); }
+    else if (kind === 'DMR') { this.noise(0.13, 0.42, 1100, 0.7); this.tone(190, 0.14, 'sawtooth', 0.2, 60); }
+    else if (kind === 'LMG' || kind === 'SMG') { this.noise(0.07, 0.3, 2100, 0.9); this.tone(300, 0.05, 'square', 0.1, 140); }
+    else { this.noise(0.09, 0.34, 1600, 0.8); this.tone(240, 0.07, 'square', 0.12, 110); }
+  }
+
+  dryFire() { this.tone(1200, 0.03, 'square', 0.08); }
+  reload() { this.tone(500, 0.05, 'square', 0.1); this.tone(340, 0.05, 'square', 0.1, null, 0.09); this.tone(700, 0.05, 'square', 0.12, null, 0.2); }
+  hit() { this.tone(1900, 0.045, 'sine', 0.16); }
+  kill() { this.tone(880, 0.09, 'sine', 0.2); this.tone(1318, 0.14, 'sine', 0.18, null, 0.07); }
+  hurt() { this.tone(140, 0.12, 'sawtooth', 0.16, 80); this.noise(0.08, 0.12, 500, 0.6); }
+  buy() { this.tone(990, 0.06, 'sine', 0.16); this.tone(1480, 0.09, 'sine', 0.14, null, 0.05); }
+  denied() { this.tone(180, 0.12, 'square', 0.14, 120); }
+  flashPop() { this.noise(0.2, 0.4, 3200, 0.4); this.tone(2400, 0.16, 'sine', 0.1, 300); }
+  grenade() { this.noise(0.5, 0.55, 300, 0.4); this.tone(70, 0.45, 'sine', 0.4, 34); }
+  plantBeep(final = false) { this.tone(final ? 1560 : 1040, final ? 0.22 : 0.07, 'sine', 0.2); }
+  defuseDone() { this.tone(760, 0.1, 'sine', 0.18); this.tone(520, 0.16, 'sine', 0.16, null, 0.09); }
+  explosion() {
+    this.noise(1.1, 0.7, 200, 0.3);
+    this.tone(58, 0.9, 'sine', 0.5, 26);
+    this.noise(0.4, 0.3, 900, 0.5, 0.05);
+  }
+  sting(win) {
+    if (win) { this.tone(523, 0.14, 'triangle', 0.2); this.tone(659, 0.14, 'triangle', 0.2, null, 0.12); this.tone(784, 0.3, 'triangle', 0.22, null, 0.24); }
+    else { this.tone(392, 0.16, 'triangle', 0.18); this.tone(330, 0.16, 'triangle', 0.18, null, 0.13); this.tone(262, 0.32, 'triangle', 0.18, null, 0.26); }
+  }
+  horn() { this.tone(196, 0.5, 'sawtooth', 0.12); this.tone(294, 0.5, 'sawtooth', 0.1, null, 0.02); }
 }

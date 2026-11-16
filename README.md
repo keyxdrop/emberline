@@ -1,39 +1,79 @@
 # EMBERLINE
 
-[![make.fun · best-game-01](https://make.fun/badge/best-game-01.svg)](https://make.fun/bounty/best-game-01?utm_source=github&utm_medium=readme&utm_campaign=best-game-01)
-[![rank](https://make.fun/badge/best-game-01/keyxdrop/emberline/rank.svg)](https://make.fun/bounty/best-game-01/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=best-game-01)
-[![reward](https://make.fun/badge/best-game-01/keyxdrop/emberline/reward.svg)](https://make.fun/bounty/best-game-01?utm_source=github&utm_medium=readme&utm_campaign=best-game-01)
+A 5v5 tactical FPS that runs entirely in a desktop browser. Ember attacks,
+Ashen defends, and between them sits a burning foundry, one Spark Charge, and
+thirty seconds of fuse. First side to five rounds takes the yard.
 
-**A 5v5 tactical FPS that runs entirely in your browser — no download, no install, no sign-up.** Open one file and you are in a plant-and-defuse match at Foundry Yard, a dusk industrial site of painted concrete, corrugated walls, a crane, pipework, drifting embers and furnace smoke.
+**Buy smart. Plant the Spark. Hold the line.**
 
-Ember carries the **Spark Charge** to Relay A or Relay B. Ashen tries to stop them. Rounds are won by elimination or by planting and defending the Spark — first to **5 rounds** takes the match. Between rounds, a buy phase runs a real economy: five guns (sidearm, SMG, rifle, shotgun, sniper), a Spark grenade, a Flash Charge that blinds whoever looks at it, and armour. The bots play real rounds back — set routes, holds, burst fire, radio callouts and wounded retreats.
+## The game
 
-New to tactical shooters? A built-in **coach** teaches the game while you play it: an amber diamond marks the objective with its distance, one hint at a time names the job of the moment in your first rounds, and a red arc shows which direction a hit came from.
+- **Rounds with a real economy.** Fifteen-second buy phases, eight shop rows
+  (five guns, a grenade, a vest, a flash gadget), kill and plant bounties,
+  win/loss bonuses that carry between rounds.
+- **Two ways to win a round.** Wipe the other squad, or plant the Spark
+  Charge at the Forge and guard it until it blows. Ashen can pull the charge
+  and steal the round back — if they reach it alive.
+- **Nine bot fighters with names and jobs.** Waypoint routes down three lanes
+  (Slag Alley, Furnace Row, Kiln Run), burst-fire discipline, preferred ranges
+  per weapon, fall-backs when hurt, radio callouts — and aim that sharpens by
+  about 4% every round, so late rounds bite harder than early ones.
+- **A coach for your first rounds.** An objective marker with a live distance
+  readout, hint chips that sequence your first two rounds, and a damage arc
+  that points at whoever just shot you.
+- **Feel.** Tracers, impact sparks, score-aware round banners, a final-blow
+  callout for the kill a round is remembered by, a fast-pulsing alarm ring
+  once the charge is live, and an ember fountain when it goes off. All sound
+  is synthesised in code with WebAudio — no audio files.
 
-## Run it
+## Play it
 
 ```sh
-node serve.ts
+node serve.ts        # serves game/ on http://localhost:8080
 ```
 
-Then open http://localhost:8080 — or just open `game/index.html` through any static file server. Everything runs offline from the files in `game/`; three.js is vendored, there is no build step and no network request.
+Open the address in desktop Chrome, click **Deploy**, and play:
 
-## Controls
-
-| Keys | Action |
+| Input | Action |
 | --- | --- |
-| W A S D / Mouse / Click | Move / look / fire |
+| WASD / mouse | Move / aim |
+| Click / right-click | Fire / aim down sights |
 | R | Reload |
-| B | Buy menu (buy phase) |
-| 1–5 | Weapons · 6/7/8 buy grenade, armour, flash |
-| G / Q | Throw Spark grenade / Flash Charge |
-| E (hold) | Plant or defuse the Spark |
-| Ctrl / Space | Crouch / jump |
+| E (hold) | Plant the charge at the Forge |
+| G / F | Throw Pop Charge / Flash Charge |
+| B, 1–8 | Buy menu and rows |
+| Shift / Ctrl | Walk / crouch |
 
-## How it is built
+## Hand it in
 
-Plain ES modules under `game/src/`, one job each: `world` (the yard), `bots` (the nine AI players), `weapons`, `rounds` (match state), `hud` (the DOM interface), `coach` (first-minute guidance), `effects`, `audio` (synthesised, no audio files), `physics`, `player`, `input`, `textures`, `palette`, `rng`. `main.ts` copies `game/` and `screenshots/` to the output and writes the dossier the make.fun judge reads. MIT licensed.
+```sh
+mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
+```
 
----
+`main.ts` copies `game/` and `screenshots/` to the output directory and
+writes `dossier.json` with the kit's `vendor/makefun-game.ts`.
 
-<sub>Entered on [make.fun](https://make.fun/?ref=jvfpr51e&utm_source=github&utm_medium=readme&utm_campaign=best-game-01) · AI agents build software for cash rewards</sub>
+## Screenshots
+
+The four dossier screenshots are staged, deterministic frames of the real
+game (`?shot=start|buy|play|end&seed=1`), re-taken with:
+
+```sh
+node shoot.mjs       # real Chrome + ffmpeg; see shots.json
+```
+
+## Layout
+
+- `game/index.html` — the page and every HUD element
+- `game/src/config.js` — the rulebook: weapons, economy, callouts, tuning
+- `game/src/world.js` — the Foundry Yard: geometry, colliders, waypoints
+- `game/src/player.js` — the human body: movement, aim, the gun in hand
+- `game/src/bots.js` — the nine bot fighters and their brains
+- `game/src/effects.js` — tracers, sparks, flashes, the ember fountain
+- `game/src/audio.js` — a WebAudio synthesiser for every sound
+- `game/src/hud.js` — scoreboard, killfeed, buy menu, banners
+- `game/src/coach.js` — objective marker, hint chips, damage arc
+- `game/src/main.js` — the match director that runs all of it
+- `game/three.module.min.js` — three.js (r160), vendored as a minified build
+
+Licensed under the MIT License (see `LICENSE`).
