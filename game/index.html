@@ -143,17 +143,18 @@
   #progress .bar { height: 8px; }
   #progress-fill { background: var(--accent); }
 
-  #buy-menu { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(430px, 92vw); background: var(--surface); border: 1px solid var(--hairline); border-radius: var(--radius-panel); padding: 20px 22px; pointer-events: auto; }
+  #buy-menu { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(430px, 92vw); max-height: 94vh; overflow-y: auto; background: var(--surface); border: 1px solid var(--hairline); border-radius: var(--radius-panel); padding: 16px 20px; pointer-events: auto; }
   #buy-menu[hidden] { display: none; }
-  #buy-menu h2 { margin: 0 0 4px; font-size: 20px; font-weight: 600; }
-  #buy-menu p { margin: 0 0 14px; font-size: 13px; color: var(--muted); }
+  #buy-menu h2 { margin: 0 0 2px; font-size: 20px; font-weight: 600; }
+  #buy-menu p { margin: 0 0 10px; font-size: 13px; color: var(--muted); }
   #buy-money { color: var(--accent); font-family: var(--font-readout); }
-  .buy-row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 10px; margin-bottom: 4px; background: transparent; border: 1px solid var(--hairline); border-radius: var(--radius-control); color: var(--ink); font: inherit; font-size: 14px; cursor: pointer; text-align: left; }
+  .buy-row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 6px 10px; margin-bottom: 4px; background: transparent; border: 1px solid var(--hairline); border-radius: var(--radius-control); color: var(--ink); font: inherit; font-size: 14px; cursor: pointer; text-align: left; }
   .buy-row:hover { border-color: var(--accent); }
   .buy-row.owned { opacity: .55; cursor: default; }
   .buy-row.poor { opacity: .55; }
   .buy-key { font-family: var(--font-readout); font-size: 12px; color: var(--muted); min-width: 16px; }
   .buy-name { flex: 1; }
+  .buy-blurb { display: block; font-size: 12px; color: var(--muted); margin-top: 1px; }
   .buy-state { font-family: var(--font-readout); font-size: 13px; color: var(--accent); }
 
   .overlay { position: fixed; inset: 0; display: grid; place-items: center; padding: 24px; background: color-mix(in srgb, var(--canvas) 86%, transparent); pointer-events: auto; }

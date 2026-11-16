@@ -11,7 +11,7 @@ import { createInput } from './input.js';
 import { createPlayer } from './player.js';
 import { createWeaponSystem, WEAPONS, GRENADE, FLASH, ARMOR } from './weapons.js';
 import { createBots } from './bots.js';
-import { createMatch, PLANT_SECONDS, DEFUSE_SECONDS } from './rounds.js';
+import { createMatch, PLANT_SECONDS, DEFUSE_SECONDS, WIN_ROUNDS } from './rounds.js';
 import { createEffects } from './effects.js';
 import { createHud } from './hud.js';
 import { createAudio } from './audio.js';
@@ -161,13 +161,28 @@ function resetPlayer() {
   hud.setHealth(100, playerState.armor);
 }
 
+// The round banner tells the state of the match, not just the phase: the
+// score, who leads, and whether the next round settles it.
+function roundBanner() {
+  const { round, score } = match.state;
+  const firstTo = WIN_ROUNDS;
+  let sub = 'Buy phase — B to shop';
+  if (score.ember === firstTo - 1 && score.ashen === firstTo - 1) sub = 'Match point — the next round takes the yard';
+  else if (score.ember === firstTo - 1) sub = 'Match point, Ember — close it out';
+  else if (score.ashen === firstTo - 1) sub = 'Match point, Ashen — win this or lose the yard';
+  else if (score.ember > score.ashen) sub = `Ember leads ${score.ember} — ${score.ashen} · buy phase`;
+  else if (score.ashen > score.ember) sub = `Ashen leads ${score.ashen} — ${score.ember} · buy phase`;
+  else if (round > 1) sub = `Level at ${score.ember} — ${score.ashen} · buy phase`;
+  hud.banner(`Round ${round}`, sub, '', 2400);
+}
+
 function startRoundAll() {
   match.startRound();
   resetPlayer();
   bots.spawnRound(match.state);
   hud.hideBuy();
   hud.setObjective('Buy phase — press B to shop');
-  hud.banner(`Round ${match.state.round}`, 'Buy phase — B to shop', '', 2200);
+  roundBanner();
   if (!shot) hud.showBuy(match.state.money, (i) => weapons.has(i));
 }
 
@@ -262,7 +277,7 @@ function advanceRound() {
   hud.hideOverlay();
   hud.hideBuy();
   hud.setObjective('Buy phase — press B to shop');
-  hud.banner(`Round ${match.state.round}`, 'Buy phase — B to shop', '', 2200);
+  roundBanner();
   if (!shot) hud.showBuy(match.state.money, (i) => weapons.has(i));
 }
 
@@ -758,6 +773,8 @@ function step(dt) {
     stepPlantDefuse(dt);
     stepGrenades(dt);
     match.update(dt, aliveCounts());
+    // The planted site's ring runs the alarm pulse while its Spark is live.
+    world.setPlanted(match.state.plant.planted ? match.state.plant.site : null);
     world.step(dt, elapsed);
     effects.step(dt);
 

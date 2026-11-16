@@ -1,46 +1,53 @@
 // The armoury: five guns and a grenade, each with its own numbers and view model.
 // A weapon owns its magazine, cooldown and reload; main.js owns the ray and the
 // damage. Spread grows with movement and with sustained fire, so stopping to aim
-// pays; the headshot multiplier lives in main.js, next to the ray.
+// pays; the headshot multiplier lives in main.js, next to the ray. Every item
+// carries a one-line blurb: the buy menu prints it under the name, so a first
+// buy is a decision, not a guess.
 import * as THREE from 'three';
 import { PALETTE } from './palette.js';
 
 export const WEAPONS = [
   {
     id: 'pistol', name: 'P-9 Sidearm', kind: 'pistol', price: 0,
+    blurb: 'Free with the job. Honest at arm\u2019s length.',
     mag: 12, reserve: 36, damage: 26, headMult: 4, fireGap: 0.16, reloadTime: 1.3,
     spreadStill: 0.004, spreadMove: 0.02, spreadBloom: 0.006, auto: false,
     range: 45, falloff: 0.55, kick: 0.006,
   },
   {
     id: 'smg', name: 'Rook-9', kind: 'smg', price: 1500,
+    blurb: 'Fast talker. Wins rooms, loses corridors.',
     mag: 28, reserve: 84, damage: 22, headMult: 4, fireGap: 0.077, reloadTime: 1.7,
-    spreadStill: 0.008, spreadMove: 0.03, spreadBloom: 0.009, auto: true,
+    spreadStill: 0.008, spreadMove: 0.027, spreadBloom: 0.009, auto: true,
     range: 38, falloff: 0.5, kick: 0.007,
   },
   {
     id: 'rifle', name: 'Longbow-7', kind: 'rifle', price: 2700,
+    blurb: 'The all-rounder. One tap, one plan.',
     mag: 25, reserve: 75, damage: 34, headMult: 4, fireGap: 0.1, reloadTime: 2.1,
     spreadStill: 0.0022, spreadMove: 0.028, spreadBloom: 0.007, auto: true,
     range: 70, falloff: 0.7, kick: 0.011,
   },
   {
     id: 'shotgun', name: 'Breacher-12', kind: 'shotgun', price: 1400,
+    blurb: 'Eight arguments, all of them short-range.',
     mag: 6, reserve: 24, damage: 9, headMult: 3, fireGap: 0.85, reloadTime: 2.4,
     spreadStill: 0.03, spreadMove: 0.045, spreadBloom: 0.01, auto: false, pellets: 8,
     range: 22, falloff: 0.35, kick: 0.03,
   },
   {
     id: 'sniper', name: 'Needle-50', kind: 'sniper', price: 4750,
+    blurb: 'One round at a time. Make it the round.',
     mag: 5, reserve: 15, damage: 95, headMult: 4, fireGap: 1.15, reloadTime: 2.8,
     spreadStill: 0.0008, spreadMove: 0.05, spreadBloom: 0.02, auto: false,
     range: 90, falloff: 0.9, kick: 0.035,
   },
 ];
 
-export const GRENADE = { id: 'grenade', name: 'Spark Grenade', price: 300, damage: 95, radius: 6.5 };
-export const FLASH = { id: 'flash', name: 'Flash Charge', price: 200, radius: 10, blind: 2.4 };
-export const ARMOR = { id: 'armor', name: 'Plate Vest', price: 650, value: 50 };
+export const GRENADE = { id: 'grenade', name: 'Spark Grenade', price: 300, damage: 95, radius: 6.5, blurb: 'Clears a Relay corner before you enter it.' };
+export const FLASH = { id: 'flash', name: 'Flash Charge', price: 200, radius: 10, blind: 2.4, blurb: 'Blinds whoever is looking at it. Don\u2019t.' };
+export const ARMOR = { id: 'armor', name: 'Plate Vest', price: 650, value: 50, blurb: 'Soaks half of every hit until it is gone.' };
 
 const MUZZLE_TIME = 0.06;
 

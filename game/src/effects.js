@@ -1,10 +1,13 @@
 // Pooled effects: tracers, impact sparks, hit bursts, smoke puffs, impact
-// flashes and the explosion / detonation pair. Pools are built once; nothing
-// is allocated per frame in the hot loops. A tracer is a thin stretched box;
-// a spark is a small tetra with a velocity and a life; smoke is a soft sprite
-// that grows and thins as it rises. Sparks come in three colours — ember
-// orange for world impacts and Ember hits, ashen teal for Ashen hits, pale
-// for the flash charge — so a hit reads as what it hit.
+// flashes, the explosion / detonation pair, and the detonation's ember
+// fountain — a short-lived emitter that keeps throwing sparks after the
+// fireball dies, so a plant going up has an afterglow, not just a blink.
+// Pools are built once; nothing is allocated per frame in the hot loops. A
+// tracer is a thin stretched box; a spark is a small tetra with a velocity
+// and a life; smoke is a soft sprite that grows and thins as it rises. Sparks
+// come in three colours — ember orange for world impacts and Ember hits,
+// ashen teal for Ashen hits, pale for the flash charge — so a hit reads as
+// what it hit.
 import * as THREE from 'three';
 import { PALETTE } from './palette.js';
 import { glowTexture } from './textures.js';
@@ -65,6 +68,23 @@ export function createEffects(scene) {
       s.mesh.visible = true;
       s.life = SPARK_LIFE * (0.5 + Math.random() * 0.5);
     }
+  }
+
+  // Ember fountains: two emitter slots. While one runs it throws a few
+  // sparks every 50 ms, alternating ember and pale, straight up with a
+  // wobble — the afterglow of something big going up.
+  const fountains = [
+    { point: new THREE.Vector3(), left: 0, tick: 0, pale: false },
+    { point: new THREE.Vector3(), left: 0, tick: 0, pale: false },
+  ];
+  let fountainNext = 0;
+  function fountain(point, seconds = 0.9) {
+    const f = fountains[fountainNext];
+    fountainNext = (fountainNext + 1) % fountains.length;
+    f.point.copy(point);
+    f.left = seconds;
+    f.tick = 0;
+    f.pale = false;
   }
 
   // Impact flashes: additive glow sprites that flare and die in a blink.
@@ -189,9 +209,11 @@ export function createEffects(scene) {
       bigBoom(point, 6.5, 90, 0.45);
       burst('ember', point, UP, 24);
       puff(point, 6, { size: 1.4, life: 1.4, strength: 0.4, rise: 1.6, spread: 1.2 });
+      fountain(point, 0.5);
     },
-    // The Spark Charge going up: bigger, brighter, with a ground shockwave
-    // and a column of embers — the round's exclamation mark.
+    // The Spark Charge going up: bigger, brighter, with a ground shockwave,
+    // a column of embers and a fountain that keeps the site lit afterwards —
+    // the round's exclamation mark.
     detonate(point) {
       bigBoom(point, 11, 170, 0.7);
       burst('ember', point, UP, 30, 1.7);
@@ -201,6 +223,7 @@ export function createEffects(scene) {
       ring.visible = true;
       ringLife = 0.55;
       impactFlash(point, 2.6, PALETTE.lamp, 0.16);
+      fountain(point, 1.1);
     },
     // The flash charge: a hard white blink and a spray of pale sparks.
     flashBurst(point) {
@@ -213,6 +236,16 @@ export function createEffects(scene) {
         t.life -= dt;
         if (t.life <= 0) t.mesh.visible = false;
         else t.mesh.material.opacity = 0.85 * (t.life / TRACER_LIFE);
+      }
+      for (const f of fountains) {
+        if (f.left <= 0) continue;
+        f.left -= dt;
+        f.tick -= dt;
+        if (f.tick <= 0) {
+          f.tick = 0.05;
+          f.pale = !f.pale;
+          burst(f.pale ? 'pale' : 'ember', f.point, UP, 3, 1.35);
+        }
       }
       for (const name of Object.keys(sparkPools)) {
         for (const s of sparkPools[name].pool) {

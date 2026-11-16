@@ -1,6 +1,8 @@
 // The DOM HUD: crosshair, hit marker, health, ammo, money, timer, score, rosters,
 // killfeed, buy menu, banners and the one overlay panel. It never touches the
-// simulation; main.js pushes numbers in and reads the callbacks out.
+// simulation; main.js pushes numbers in and reads the callbacks out. The buy
+// rows carry each item's one-line blurb (weapons.js) under its name, so a
+// first-time buyer can tell a Rook from a Longbow without a wiki.
 import { WEAPONS, GRENADE, FLASH, ARMOR } from './weapons.js';
 
 const COPY = {
@@ -73,10 +75,10 @@ export function createHud(callbacks) {
   }
 
   const buyItems = [
-    ...WEAPONS.map((w, i) => ({ key: String(i + 1), name: w.name, price: w.price, index: i, kind: 'weapon' })),
-    { key: '6', name: GRENADE.name, price: GRENADE.price, index: 5, kind: 'grenade' },
-    { key: '7', name: ARMOR.name, price: ARMOR.price, index: 6, kind: 'armor' },
-    { key: '8', name: FLASH.name, price: FLASH.price, index: 7, kind: 'flash' },
+    ...WEAPONS.map((w, i) => ({ key: String(i + 1), name: w.name, blurb: w.blurb, price: w.price, index: i, kind: 'weapon' })),
+    { key: '6', name: GRENADE.name, blurb: GRENADE.blurb, price: GRENADE.price, index: 5, kind: 'grenade' },
+    { key: '7', name: ARMOR.name, blurb: ARMOR.blurb, price: ARMOR.price, index: 6, kind: 'armor' },
+    { key: '8', name: FLASH.name, blurb: FLASH.blurb, price: FLASH.price, index: 7, kind: 'flash' },
   ];
 
   return {
@@ -189,7 +191,7 @@ export function createHud(callbacks) {
         const has = item.kind === 'weapon' ? owned(item.index) : false;
         const afford = money >= item.price;
         return `<button type="button" class="buy-row${has ? ' owned' : ''}${afford ? '' : ' poor'}" data-index="${item.index}" data-kind="${item.kind}">
-          <span class="buy-key">${item.key}</span><span class="buy-name">${item.name}</span>
+          <span class="buy-key">${item.key}</span><span class="buy-name">${item.name}<span class="buy-blurb">${item.blurb || ''}</span></span>
           <span class="buy-state">${has ? 'OWNED' : `$${item.price}`}</span></button>`;
       }).join('');
       buyList.querySelectorAll('.buy-row').forEach((el) => {

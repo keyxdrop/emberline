@@ -4,7 +4,10 @@
 // and hears. Perception is a staggered line-of-sight check against the world's
 // shootables; aim error grows with distance and target speed, and fire comes
 // in bursts with pauses, so a still, aiming bot is dangerous and a spraying
-// one is not. main.js owns the ray and the damage; bots only decide and ask.
+// one is not. Reaction time tightens a little every round, so the yard
+// sharpens as the match goes on and a late-round lead has to be defended
+// against quicker guns. main.js owns the ray and the damage; bots only decide
+// and ask.
 import * as THREE from 'three';
 import { PALETTE } from './palette.js';
 import { createMover } from './physics.js';
@@ -31,12 +34,12 @@ const BOT_GUNS = {
 // the lines are flavour with a job — they tell the player (and anyone reading
 // a screenshot) that the yard is being fought over by a team, not targets.
 const CALLOUTS = {
-  contact: ['Contact — {area}!', 'Eyes on — {area}!', 'Hostile, {area}!', 'There — {area}!'],
-  plant: ['Spark going down — cover me!', 'Planting! Watch my back!', 'Spark is going in!'],
-  defuse: ['Cutting the Spark — hold them off!', 'On the Spark — keep them back!', 'Defusing, cover me!'],
-  hurt: ["I'm hit!", 'Taking fire!', 'Hit — falling back!'],
-  blind: ['Flashed — I can\'t see!', 'My eyes! Blind!'],
-  hold: ['Holding {area}.', 'Set at {area}.', 'Watching {area}.'],
+  contact: ['Contact — {area}!', 'Eyes on — {area}!', 'Hostile, {area}!', 'There — {area}!', 'Movement — {area}!', 'One crossing — {area}!'],
+  plant: ['Spark going down — cover me!', 'Planting! Watch my back!', 'Spark is going in!', 'Setting the Spark — eyes up!'],
+  defuse: ['Cutting the Spark — hold them off!', 'On the Spark — keep them back!', 'Defusing, cover me!', 'Working on the Spark — buy me seconds!'],
+  hurt: ["I'm hit!", 'Taking fire!', 'Hit — falling back!', 'Caught one — need cover!'],
+  blind: ['Flashed — I can\'t see!', 'My eyes! Blind!', 'White-out! Give me a second!'],
+  hold: ['Holding {area}.', 'Set at {area}.', 'Watching {area}.', 'Quiet at {area} — for now.'],
 };
 
 function buildBotMesh(team) {
@@ -323,7 +326,10 @@ export function createBots(scene, world, random) {
       const seen = nearestVisible(bot, ctx.actors, ctx.raycaster);
       if (seen) {
         if (bot.target !== seen) {
-          bot.reaction = range(random, 0.35, 0.7);
+          // The difficulty ramp: reactions tighten ~4% a round, floored at
+          // three quarters, so round 9 shoots noticeably sooner than round 1.
+          const ramp = Math.max(0.75, 1 - (ctx.match.round - 1) * 0.04);
+          bot.reaction = range(random, 0.35, 0.7) * ramp;
           if (random() < 0.55) callout(bot, time, ctx, 'contact', areaName(seen.position.x, seen.position.z));
         }
         bot.target = seen;

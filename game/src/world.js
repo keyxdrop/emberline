@@ -6,7 +6,10 @@
 // walls and plate metal, a gradient dusk sky with a skyline beyond the walls,
 // barrels, pipework, a working crane, hanging lamps, drifting embers and the
 // furnace's smoke. Props hug the walls and corners so the lanes, routes and
-// holds the bots play on stay exactly as they were.
+// holds the bots play on stay exactly as they were. The site rings breathe
+// slowly while a round is live; the moment a Spark is planted, its ring
+// switches to a fast, bright pulse (setPlanted, called from main.js), so the
+// round's state reads from anywhere in the yard.
 import * as THREE from 'three';
 import { PALETTE } from './palette.js';
 import {
@@ -445,6 +448,9 @@ export function createWorld(scene) {
   siteLightB.position.set(16, 3, -11);
   scene.add(siteLightB);
 
+  // Which site holds a live Spark, if any: setPlanted('A' | 'B' | null).
+  let plantedSite = null;
+
   return {
     colliders,
     shootables,
@@ -452,13 +458,30 @@ export function createWorld(scene) {
     charge,
     chargeLight,
     rings,
+    setPlanted(site) {
+      plantedSite = site;
+    },
     step(dt, time) {
       // Furnace breath: the glow swells and ebbs; the rings pulse slowly.
       furnaceLight.intensity = 24 + Math.sin(time * 2.3) * 3 + Math.sin(time * 5.1) * 1.2;
       emberGlow.emissiveIntensity = 1.3 + Math.sin(time * 7.3) * 0.25 + Math.sin(time * 13.7) * 0.12;
       bridgeLight.intensity = 13 + Math.sin(time * 11) * 0.5 + Math.sin(time * 23.7) * 0.35;
-      rings.A.material.opacity = 0.5 + Math.sin(time * 1.4) * 0.15;
-      rings.B.material.opacity = 0.5 + Math.cos(time * 1.4) * 0.15;
+      // Site rings: a slow breath while the round is live — but a planted
+      // site's ring switches to a fast, bright alarm pulse, and its pylon
+      // light swells with it, so nobody has to read the HUD to know.
+      for (const siteKey of ['A', 'B']) {
+        if (siteKey === plantedSite) {
+          rings[siteKey].material.opacity = 0.72 + Math.sin(time * 6.5) * 0.28;
+        } else {
+          rings[siteKey].material.opacity = 0.5 + Math.sin(time * 1.4 + (siteKey === 'B' ? Math.PI : 0)) * 0.15;
+        }
+      }
+      if (plantedSite === 'A') siteLightA.intensity = 9 + Math.sin(time * 6.5) * 4;
+      else if (plantedSite === 'B') siteLightB.intensity = 9 + Math.sin(time * 6.5) * 4;
+      else {
+        siteLightA.intensity = 5;
+        siteLightB.intensity = 5;
+      }
       // The crane's load sways, barely, on its cables.
       craneSwing.rotation.z = Math.sin(time * 0.55) * 0.03;
       craneSwing.rotation.x = Math.cos(time * 0.42) * 0.02;
